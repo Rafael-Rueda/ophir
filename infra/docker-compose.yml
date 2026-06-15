@@ -84,7 +84,7 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_USERS_DEFAULT_THEME: dark
     ports:
-      - "3000:3000"
+      - "1234:1234"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - grafanadata:/var/lib/grafana
