@@ -214,6 +214,18 @@ npm test            # vitest (unit + contract; integration auto-skips without th
 - Known sensitive attributes are dropped in the Collector pipeline and redacted from anything Ophir stores (e.g. audit metadata).
 - Do not expose Grafana publicly without its own authentication or a trusted network boundary.
 
+## Tutorial to get a credential and Registry an App
+
+# login
+$tok = (Invoke-RestMethod -Method Post -Uri http://localhost:8080/v1/auth/login -ContentType application/json -Body '{"email":"admin@example.com","password":"local-development-password"}').accessToken
+$h = @{ Authorization = "Bearer $tok" }
+
+# Create The Source
+$src = Invoke-RestMethod -Method Post -Uri http://localhost:8080/v1/sources -Headers $h -ContentType application/json -Body '{"slug":"my-app","displayName":"My App","environment":"local"}'
+
+# Create The Credential (The key shows just once)
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/v1/sources/$($src.id)/credentials" -Headers $h
+
 ## License
 
 UNLICENSED — internal template project.
