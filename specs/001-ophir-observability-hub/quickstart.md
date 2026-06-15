@@ -36,7 +36,7 @@ OpenTelemetry Collector http://localhost:4318
 Prometheus:             http://localhost:9090
 Loki:                   http://localhost:3100
 Tempo:                  http://localhost:3200
-PostgreSQL:             localhost:5432
+PostgreSQL:             localhost:5442
 ```
 
 ## Step 1: Start Infrastructure

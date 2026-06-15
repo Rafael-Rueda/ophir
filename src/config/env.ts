@@ -22,7 +22,7 @@ const EnvSchema = z.object({
     .default("info"),
 
   // PostgreSQL control-plane database.
-  DATABASE_URL: z.string().min(1).default("postgres://ophir:ophir@localhost:5432/ophir"),
+  DATABASE_URL: z.string().min(1).default("postgres://ophir:ophir@localhost:5442/ophir"),
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
 
   // Admin authentication.

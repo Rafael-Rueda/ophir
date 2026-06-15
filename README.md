@@ -86,7 +86,7 @@ The API listens on `http://localhost:8080`.
 | Prometheus             | http://localhost:9090     |
 | Loki                   | http://localhost:3100     |
 | Tempo                  | http://localhost:3200     |
-| PostgreSQL             | localhost:5432            |
+| PostgreSQL             | localhost:5442            |
 
 ## API Overview
 
@@ -116,7 +116,7 @@ Configuration is environment-driven and validated with zod at startup. See [`.en
 | Variable                  | Default                                      | Purpose                                   |
 | ------------------------- | -------------------------------------------- | ----------------------------------------- |
 | `PORT` / `HOST`           | `8080` / `0.0.0.0`                            | API bind address                          |
-| `DATABASE_URL`            | `postgres://ophir:ophir@localhost:5432/ophir`| Control-plane PostgreSQL                   |
+| `DATABASE_URL`            | `postgres://ophir:ophir@localhost:5442/ophir`| Control-plane PostgreSQL                   |
 | `JWT_SECRET`              | dev placeholder (≥32 chars)                   | Admin session signing (set in production) |
 | `COLLECTOR_OTLP_HTTP_URL` | `http://localhost:4318`                       | OTLP forward target                       |
 | `GRAFANA_PUBLIC_URL`      | `http://localhost:3000`                       | Browser URL used in dashboard links       |

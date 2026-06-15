@@ -1,4 +1,8 @@
-# Minimal single-binary Tempo config for local development.
+# Minimal single-binary (monolithic) Tempo config for local development.
+# Ingester/compactor use built-in defaults; recent Tempo versions removed those
+# top-level fields from the config schema, so they must not be set here.
+stream_over_http_enabled: true
+
 server:
   http_listen_port: 3200
 
@@ -7,21 +11,17 @@ distributor:
     otlp:
       protocols:
         grpc:
-          endpoint: 0.0.0.0:4317
+          endpoint: "0.0.0.0:4317"
         http:
-          endpoint: 0.0.0.0:4318
-
-ingester:
-  max_block_duration: 5m
-
-compactor:
-  compaction:
-    block_retention: 1h
+          endpoint: "0.0.0.0:4318"
 
 storage:
   trace:
     backend: local
-    local:
-      path: /var/tempo/blocks
     wal:
       path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+usage_report:
+  reporting_enabled: false
