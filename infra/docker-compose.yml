@@ -110,8 +110,8 @@ services:
       LOKI_URL: http://loki:3100
       TEMPO_URL: http://tempo:3200
       PROMETHEUS_URL: http://prometheus:9090
-      GRAFANA_URL: http://grafana:3000
-      GRAFANA_PUBLIC_URL: http://localhost:3000
+      GRAFANA_URL: http://grafana:1234
+      GRAFANA_PUBLIC_URL: http://localhost:1234
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_SERVICE_NAME: ophir
     command: ["sh", "-c", "node dist/db/migrate.js && node --import ./dist/observability/instrumentation.js dist/main.js"]

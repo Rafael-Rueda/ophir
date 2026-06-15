@@ -31,7 +31,7 @@ After implementation, local development should start these services:
 
 ```text
 Ophir API:              http://localhost:8080
-Grafana:                http://localhost:3000
+Grafana:                http://localhost:1234
 OpenTelemetry Collector http://localhost:4318
 Prometheus:             http://localhost:9090
 Loki:                   http://localhost:3100
@@ -174,7 +174,7 @@ Expected result:
 Open Grafana:
 
 ```text
-http://localhost:3000
+http://localhost:1234
 ```
 
 Expected checks:

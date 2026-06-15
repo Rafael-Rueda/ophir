@@ -43,9 +43,9 @@ const EnvSchema = z.object({
   LOKI_URL: z.string().url().default("http://localhost:3100"),
   TEMPO_URL: z.string().url().default("http://localhost:3200"),
   PROMETHEUS_URL: z.string().url().default("http://localhost:9090"),
-  GRAFANA_URL: z.string().url().default("http://localhost:3000"),
+  GRAFANA_URL: z.string().url().default("http://localhost:1234"),
   // Browser-reachable Grafana base used to build clickable dashboard links.
-  GRAFANA_PUBLIC_URL: z.string().url().default("http://localhost:3000"),
+  GRAFANA_PUBLIC_URL: z.string().url().default("http://localhost:1234"),
   HEALTH_PROBE_INTERVAL_MS: z.coerce.number().int().positive().default(30_000),
   HEALTH_PROBE_TIMEOUT_MS: z.coerce.number().int().positive().default(3000),
   HEALTH_PROBE_ENABLED: booleanFromEnv(true),

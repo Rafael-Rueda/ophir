@@ -81,7 +81,7 @@ The API listens on `http://localhost:8080`.
 | Service                | URL                       |
 | ---------------------- | ------------------------- |
 | Ophir API              | http://localhost:8080     |
-| Grafana                | http://localhost:3000     |
+| Grafana                | http://localhost:1234     |
 | OpenTelemetry Collector| http://localhost:4318     |
 | Prometheus             | http://localhost:9090     |
 | Loki                   | http://localhost:3100     |
@@ -119,7 +119,7 @@ Configuration is environment-driven and validated with zod at startup. See [`.en
 | `DATABASE_URL`            | `postgres://ophir:ophir@localhost:5442/ophir`| Control-plane PostgreSQL                   |
 | `JWT_SECRET`              | dev placeholder (≥32 chars)                   | Admin session signing (set in production) |
 | `COLLECTOR_OTLP_HTTP_URL` | `http://localhost:4318`                       | OTLP forward target                       |
-| `GRAFANA_PUBLIC_URL`      | `http://localhost:3000`                       | Browser URL used in dashboard links       |
+| `GRAFANA_PUBLIC_URL`      | `http://localhost:1234`                       | Browser URL used in dashboard links       |
 | `OTEL_SDK_DISABLED`       | `false`                                       | Disable Ophir self-instrumentation        |
 
 ## Testing
