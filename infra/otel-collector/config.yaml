@@ -1,0 +1,60 @@
+# OpenTelemetry Collector configuration for the local Ophir stack.
+# Receives OTLP from Ophir, redacts known sensitive attributes, then routes:
+#   logs    -> Loki   traces -> Tempo   metrics -> Prometheus (scrape exporter)
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+  # Drop known sensitive attribute keys before export (defense in depth;
+  # Ophir also redacts what it stores itself).
+  attributes/redact:
+    actions:
+      - { key: authorization, action: delete }
+      - { key: cookie, action: delete }
+      - { key: set-cookie, action: delete }
+      - { key: password, action: delete }
+      - { key: secret, action: delete }
+      - { key: token, action: delete }
+      - { key: api_key, action: delete }
+      - { key: credit_card, action: delete }
+
+exporters:
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true
+  debug:
+    verbosity: basic
+
+service:
+  extensions: [health_check]
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [attributes/redact, batch]
+      exporters: [otlphttp/loki, debug]
+    traces:
+      receivers: [otlp]
+      processors: [attributes/redact, batch]
+      exporters: [otlp/tempo, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [attributes/redact, batch]
+      exporters: [prometheus, debug]
