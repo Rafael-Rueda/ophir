@@ -1,59 +1,72 @@
-# Local Ophir Observability Hub stack:
+# Ophir Observability Hub - full stack.
 # PostgreSQL + OpenTelemetry Collector + Loki + Tempo + Prometheus + Grafana + Ophir.
-# Start with:  docker compose -f infra/docker-compose.yml up -d
+#
+# All configuration comes from environment variables (see infra/.env.example).
+# Run with an env file so secrets stay out of git:
+#   docker compose --env-file infra/.env -f infra/docker-compose.yml up -d
+#
+# Security defaults:
+# - Internal services (db, collector, loki, tempo, prometheus) bind to
+#   ${DEBUG_BIND:-127.0.0.1} (localhost only) — not exposed to the network.
+# - Only Ophir (ingestion API) and Grafana (admin UI, login required) are
+#   intended to be reachable externally; tune *_BIND vars as needed.
 
-name: ophir
+name: ${COMPOSE_PROJECT_NAME:-ophir}
 
 services:
   postgres:
-    image: postgres:16-alpine
-    container_name: ophir-postgres
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    container_name: ${COMPOSE_PROJECT_NAME:-ophir}-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: ophir
-      POSTGRES_PASSWORD: ophir
-      POSTGRES_DB: ophir
+      POSTGRES_USER: ${POSTGRES_USER:-ophir}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ophir}
+      POSTGRES_DB: ${POSTGRES_DB:-ophir}
     ports:
-      - "5442:5432"
+      - "${DEBUG_BIND:-127.0.0.1}:${POSTGRES_PORT:-5442}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ophir -d ophir"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ophir} -d ${POSTGRES_DB:-ophir}"]
       interval: 5s
       timeout: 5s
       retries: 10
     networks: [ophir]
 
   loki:
-    image: grafana/loki:latest
-    container_name: ophir-loki
+    image: ${LOKI_IMAGE:-grafana/loki:latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-ophir}-loki
+    restart: unless-stopped
     command: ["-config.file=/etc/loki/config.yaml"]
     ports:
-      - "3100:3100"
+      - "${DEBUG_BIND:-127.0.0.1}:${LOKI_PORT:-3100}:3100"
     volumes:
       - ./loki/config.yaml:/etc/loki/config.yaml:ro
       - lokidata:/loki
     networks: [ophir]
 
   tempo:
-    image: grafana/tempo:latest
-    container_name: ophir-tempo
+    image: ${TEMPO_IMAGE:-grafana/tempo:latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-ophir}-tempo
+    restart: unless-stopped
     command: ["-config.file=/etc/tempo/config.yaml"]
     ports:
-      - "3200:3200"
+      - "${DEBUG_BIND:-127.0.0.1}:${TEMPO_PORT:-3200}:3200"
     volumes:
       - ./tempo/config.yaml:/etc/tempo/config.yaml:ro
       - tempodata:/var/tempo
     networks: [ophir]
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
-    container_name: ophir-otel-collector
+    image: ${OTEL_COLLECTOR_IMAGE:-otel/opentelemetry-collector-contrib:latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-ophir}-otel-collector
+    restart: unless-stopped
     command: ["--config=/etc/otel/config.yaml"]
     ports:
-      - "4317:4317" # OTLP gRPC
-      - "4318:4318" # OTLP HTTP
-      - "8889:8889" # Prometheus exporter
-      - "13133:13133" # health_check
+      - "${DEBUG_BIND:-127.0.0.1}:${OTEL_GRPC_PORT:-4317}:4317"
+      - "${DEBUG_BIND:-127.0.0.1}:${OTEL_HTTP_PORT:-4318}:4318"
+      - "${DEBUG_BIND:-127.0.0.1}:${OTEL_PROM_PORT:-8889}:8889"
+      - "${DEBUG_BIND:-127.0.0.1}:${OTEL_HEALTH_PORT:-13133}:13133"
     volumes:
       - ./otel-collector/config.yaml:/etc/otel/config.yaml:ro
     depends_on:
@@ -62,31 +75,33 @@ services:
     networks: [ophir]
 
   prometheus:
-    image: prom/prometheus:latest
-    container_name: ophir-prometheus
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-ophir}-prometheus
+    restart: unless-stopped
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--web.enable-lifecycle"
     ports:
-      - "9090:9090"
+      - "${DEBUG_BIND:-127.0.0.1}:${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheusdata:/prometheus
     networks: [ophir]
 
   grafana:
-    image: grafana/grafana:latest
-    container_name: ophir-grafana
+    image: ${GRAFANA_IMAGE:-grafana/grafana:latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-ophir}-grafana
+    restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SERVER_ROOT_URL: ${GRAFANA_PUBLIC_URL:-http://localhost:1234}
       # Telemetry is admin-only: require login, no anonymous access, no self sign-up.
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_USERS_DEFAULT_THEME: dark
     ports:
-      # host:container -> Grafana listens on 3000 inside the container.
-      - "1234:3000"
+      - "${GRAFANA_BIND:-0.0.0.0}:${GRAFANA_PORT:-1234}:3000"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - grafanadata:/var/lib/grafana
@@ -97,28 +112,48 @@ services:
     networks: [ophir]
 
   ophir:
+    image: ${OPHIR_IMAGE:-ophir:latest}
     build:
       context: ..
       dockerfile: Dockerfile
-    container_name: ophir-api
+    container_name: ${COMPOSE_PROJECT_NAME:-ophir}-api
+    restart: unless-stopped
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       HOST: 0.0.0.0
       PORT: "8080"
-      DATABASE_URL: postgres://ophir:ophir@postgres:5432/ophir
-      JWT_SECRET: change-me-to-a-long-random-secret-string-min-32-chars
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      DATABASE_URL: "postgres://${POSTGRES_USER:-ophir}:${POSTGRES_PASSWORD:-ophir}@postgres:5432/${POSTGRES_DB:-ophir}"
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+      # Admin auth — MUST be overridden in production (>=32 chars).
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret-string-min-32-chars}
+      JWT_ISSUER: ${JWT_ISSUER:-ophir}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-ophir-admin}
+      ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-3600}
+      SOURCE_KEY_PREFIX: ${SOURCE_KEY_PREFIX:-ophir_src_}
+      # Internal stack wiring (service DNS names on the compose network).
       COLLECTOR_OTLP_HTTP_URL: http://otel-collector:4318
+      COLLECTOR_FORWARD_TIMEOUT_MS: ${COLLECTOR_FORWARD_TIMEOUT_MS:-5000}
       COLLECTOR_URL: http://otel-collector:13133
       LOKI_URL: http://loki:3100
       TEMPO_URL: http://tempo:3200
       PROMETHEUS_URL: http://prometheus:9090
       GRAFANA_URL: http://grafana:3000
-      GRAFANA_PUBLIC_URL: http://localhost:1234
+      GRAFANA_PUBLIC_URL: ${GRAFANA_PUBLIC_URL:-http://localhost:1234}
+      HEALTH_PROBE_INTERVAL_MS: ${HEALTH_PROBE_INTERVAL_MS:-30000}
+      HEALTH_PROBE_TIMEOUT_MS: ${HEALTH_PROBE_TIMEOUT_MS:-3000}
+      HEALTH_PROBE_ENABLED: ${HEALTH_PROBE_ENABLED:-true}
+      # Ophir self-observability through the same Collector.
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-ophir}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_SERVICE_NAME: ophir
-    command: ["sh", "-c", "node dist/db/migrate.js && node --import ./dist/observability/instrumentation.js dist/main.js"]
+      # Optional bootstrap admin (used by the migrate/admin scripts if you wire it).
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-}
     ports:
-      - "8080:8080"
+      - "${OPHIR_BIND:-0.0.0.0}:${OPHIR_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy

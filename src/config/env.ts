@@ -4,6 +4,14 @@ import { z } from "zod";
  * Parses a boolean from common string representations because environment
  * variables are always strings (e.g. "false" must not coerce to `true`).
  */
+/**
+ * Treats an empty string as "not provided". Container orchestrators (Docker
+ * Compose `${VAR:-}`) often inject empty strings for unset optional vars, which
+ * would otherwise fail `.optional()` validation.
+ */
+const emptyToUndefined = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((value) => (value === "" ? undefined : value), schema);
+
 const booleanFromEnv = (defaultValue: boolean) =>
   z
     .union([z.boolean(), z.string()])
@@ -55,10 +63,11 @@ const EnvSchema = z.object({
   OTEL_SERVICE_NAME: z.string().min(1).default("ophir"),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().default("http://localhost:4318"),
 
-  // Optional bootstrap admin (used by `npm run admin:create`).
-  BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
-  BOOTSTRAP_ADMIN_PASSWORD: z.string().min(12).optional(),
-  BOOTSTRAP_ADMIN_NAME: z.string().min(1).optional(),
+  // Optional bootstrap admin (used by `npm run admin:create` and, when set, to
+  // auto-create the admin on container startup).
+  BOOTSTRAP_ADMIN_EMAIL: emptyToUndefined(z.string().email().optional()),
+  BOOTSTRAP_ADMIN_PASSWORD: emptyToUndefined(z.string().min(12).optional()),
+  BOOTSTRAP_ADMIN_NAME: emptyToUndefined(z.string().min(1).optional()),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

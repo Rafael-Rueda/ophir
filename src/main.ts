@@ -2,6 +2,7 @@ import { buildApp } from "./app.js";
 import { getEnv } from "./config/env.js";
 import { closePool } from "./db/client.js";
 import { logger } from "./observability/logger.js";
+import { createAdmin } from "./auth/admin-auth.service.js";
 import {
   seedDefaultIntegrations,
   startHealthProbeScheduler,
@@ -10,6 +11,20 @@ import {
 async function main(): Promise<void> {
   const env = getEnv();
   const app = await buildApp();
+
+  // Optionally create the first admin from env (handy for container deploys).
+  if (env.BOOTSTRAP_ADMIN_EMAIL && env.BOOTSTRAP_ADMIN_PASSWORD) {
+    try {
+      await createAdmin({
+        email: env.BOOTSTRAP_ADMIN_EMAIL,
+        password: env.BOOTSTRAP_ADMIN_PASSWORD,
+        displayName: env.BOOTSTRAP_ADMIN_NAME ?? "Admin",
+      });
+      app.log.info({ email: env.BOOTSTRAP_ADMIN_EMAIL }, "Bootstrap admin created");
+    } catch {
+      app.log.info("Bootstrap admin already exists or was not created");
+    }
+  }
 
   // Ensure default integrations exist, then start background health probing.
   try {

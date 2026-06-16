@@ -1,0 +1,100 @@
+# syntax=docker/dockerfile:1
+
+# ===========================================================================
+# Ophir Observability Hub - ALL-IN-ONE image.
+#
+# A single container that bundles the entire stack:
+#   - Grafana, Loki, Tempo, Prometheus, OpenTelemetry Collector
+#     (from the official grafana/otel-lgtm base image)
+#   - the Ophir API (Node.js) + a portable Node runtime
+#
+# PostgreSQL is NOT bundled: the operator supplies an external database via the
+# DATABASE_URL environment variable. No secrets are baked into the image.
+# ===========================================================================
+
+# --- Build stage: compile Ophir + grab a portable Node runtime -------------
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+
+# Tools needed to download/extract the portable Node runtime for the RHEL base.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl xz-utils ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY tsconfig.json tsconfig.build.json ./
+COPY src ./src
+RUN npm run build \
+    # SQL migrations are not compiled by tsc; ship them beside the runner.
+ && cp -r src/db/migrations dist/db/migrations \
+    # Drop dev dependencies so only the production runtime is copied later.
+ && npm prune --omit=dev
+
+# Official nodejs.org Linux build is glibc-portable and runs on the RHEL-based
+# otel-lgtm image (which ships no package manager / tar / xz). Pin the latest
+# Node 24 patch automatically.
+RUN set -eux; \
+    ver="$(curl -fsSL https://nodejs.org/dist/index.json \
+            | grep -oE '"version":"v24\.[0-9]+\.[0-9]+"' | head -1 \
+            | grep -oE 'v24\.[0-9]+\.[0-9]+')"; \
+    echo "Fetching portable Node ${ver}"; \
+    curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/${ver}/node-${ver}-linux-x64.tar.xz"; \
+    mkdir -p /opt/node; \
+    tar -xJf /tmp/node.tar.xz -C /opt/node --strip-components=1 --no-same-owner; \
+    rm /tmp/node.tar.xz; \
+    /opt/node/bin/node --version
+
+# --- Lib stage: matching libstdc++/libgcc for the RHEL-based otel-lgtm -----
+# The otel-lgtm base is RHEL9 but ships no package manager and no libstdc++,
+# which Node requires. Pull the libs from a UBI9 image (identical glibc) so they
+# load cleanly on the base.
+FROM redhat/ubi9-minimal:latest AS rhellibs
+RUN microdnf install -y libstdc++ && microdnf clean all
+
+# --- Runtime stage: all-in-one on top of grafana/otel-lgtm -----------------
+FROM grafana/otel-lgtm:latest AS runtime
+
+# C++ runtime libraries required by Node (sourced from UBI9 = same glibc).
+COPY --from=rhellibs /usr/lib64/libstdc++.so.6 /usr/lib64/libstdc++.so.6
+COPY --from=rhellibs /usr/lib64/libgcc_s.so.1 /usr/lib64/libgcc_s.so.1
+
+# Portable Node runtime (validated against the base image's glibc at build time).
+COPY --from=build /opt/node /opt/node
+ENV PATH="/opt/node/bin:${PATH}"
+RUN node --version
+
+WORKDIR /app
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    PORT=8080
+
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY package.json ./package.json
+
+# Provision the Ophir overview dashboard into the bundled Grafana.
+COPY infra/grafana/provisioning/dashboards/ophir-overview.json \
+     /otel-lgtm/grafana-dashboard-ophir-overview.json
+COPY infra/grafana/allinone/ophir-dashboards.yaml \
+     /otel-lgtm/grafana/conf/provisioning/dashboards/ophir-dashboards.yaml
+
+# All-in-one supervisor entrypoint (boots the stack, then Ophir).
+COPY infra/allinone-entrypoint.sh /usr/local/bin/allinone-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/allinone-entrypoint.sh \
+ && chmod +x /usr/local/bin/allinone-entrypoint.sh
+
+# Ophir API (8080), Grafana UI (3000), OTLP gRPC/HTTP (4317/4318).
+EXPOSE 8080 3000 4317 4318
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=5 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+LABEL org.opencontainers.image.title="Ophir Observability Hub (all-in-one)" \
+      org.opencontainers.image.description="Single-container Ophir API + Grafana/Loki/Tempo/Prometheus/OpenTelemetry Collector. External PostgreSQL via DATABASE_URL." \
+      org.opencontainers.image.licenses="UNLICENSED"
+
+# Reset the base CMD; our entrypoint owns process startup.
+ENTRYPOINT ["/usr/local/bin/allinone-entrypoint.sh"]
+CMD []

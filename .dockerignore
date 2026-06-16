@@ -1,16 +1,34 @@
+# Dependencies & build output
 node_modules/
 dist/
 coverage/
+
+# VCS & editor/tooling
 .git/
 .gitignore
-.env
-.env.*
-*.log
-logs/
-tests/
-specs/
-infra/.data/
 .idea/
 .vscode/
+.cursor/
+.specify/
+.agents/
+agent-transcripts/
+
+# Secrets & local env files (NEVER ship into the image)
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Logs & local data volumes
+*.log
+logs/
+infra/.data/
+
+# Not needed at build time
+tests/
+specs/
+assets/
+*.md
+*.ps1
 Dockerfile
 .dockerignore

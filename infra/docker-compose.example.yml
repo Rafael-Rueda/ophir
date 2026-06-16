@@ -1,0 +1,150 @@
+# ===========================================================================
+# Ophir Observability Hub - END-USER (consumer) deployment example.
+#
+# A SINGLE all-in-one container that bundles everything:
+#   Ophir API + Grafana + Loki + Tempo + Prometheus + OpenTelemetry Collector.
+#
+# PostgreSQL is NOT bundled: Ophir uses an EXTERNAL database that you point it
+# at via DATABASE_URL. No secrets are baked into the image.
+#
+# Usage:
+#   1. Copy infra/.env.allinone.example  ->  .env  and fill in the values
+#      (at minimum: OPHIR_IMAGE, DATABASE_URL, JWT_SECRET).
+#   2. Start it:
+#        docker compose -f docker-compose.example.yml --env-file .env up -d
+#   3. Open:
+#        - Ophir API   ->  http://localhost:8080
+#        - Grafana UI  ->  http://localhost:1234  (login required)
+# ===========================================================================
+
+name: ${COMPOSE_PROJECT_NAME:-ophir}
+
+services:
+  ophir:
+    # The published all-in-one image (no local build needed). Set OPHIR_IMAGE.
+    image: ${OPHIR_IMAGE:-rafaelrueda/ophir:latest}
+    pull_policy: always
+    container_name: ${COMPOSE_PROJECT_NAME:-ophir}
+    restart: unless-stopped
+    environment:
+      # --- REQUIRED ---------------------------------------------------------
+      # External PostgreSQL that Ophir uses for its control plane.
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to your external Postgres}
+      # Admin auth signing secret (>= 32 chars).
+      JWT_SECRET: ${JWT_SECRET:?set a long random JWT secret (>=32 chars)}
+
+      # --- Ophir API runtime -----------------------------------------------
+      NODE_ENV: ${NODE_ENV:-production}
+      HOST: ${HOST:-0.0.0.0}
+      PORT: ${PORT:-8080}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+
+      # --- Ophir PostgreSQL control plane ----------------------------------
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+
+      # --- Ophir admin authentication --------------------------------------
+      JWT_ISSUER: ${JWT_ISSUER:-ophir}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-ophir-admin}
+      ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-3600}
+
+      # --- Optional: auto-create the first Ophir admin on boot --------------
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-}
+
+      # --- Source ingestion (apps send OTLP through Ophir on :8080/otel) ----
+      SOURCE_KEY_PREFIX: ${SOURCE_KEY_PREFIX:-ophir_src_}
+      COLLECTOR_OTLP_HTTP_URL: ${COLLECTOR_OTLP_HTTP_URL:-http://127.0.0.1:4318}
+      COLLECTOR_FORWARD_TIMEOUT_MS: ${COLLECTOR_FORWARD_TIMEOUT_MS:-5000}
+
+      # --- Ophir self-observability ----------------------------------------
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-ophir}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-deployment.environment=production}
+
+      # --- Bundled stack internal health URLs -------------------------------
+      COLLECTOR_URL: ${COLLECTOR_URL:-http://127.0.0.1:13133}
+      LOKI_URL: ${LOKI_URL:-http://127.0.0.1:3100}
+      TEMPO_URL: ${TEMPO_URL:-http://127.0.0.1:3200}
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-http://127.0.0.1:9090}
+      GRAFANA_URL: ${GRAFANA_URL:-http://127.0.0.1:3000}
+      HEALTH_PROBE_ENABLED: ${HEALTH_PROBE_ENABLED:-true}
+      HEALTH_PROBE_INTERVAL_MS: ${HEALTH_PROBE_INTERVAL_MS:-30000}
+      HEALTH_PROBE_TIMEOUT_MS: ${HEALTH_PROBE_TIMEOUT_MS:-3000}
+
+      # --- Grafana (container port is 3000; host port is GRAFANA_PORT) -------
+      GRAFANA_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      # If you expose Grafana on host port 1234, this must also use :1234.
+      GRAFANA_PUBLIC_URL: ${GRAFANA_PUBLIC_URL:-http://localhost:1234}
+      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL:-http://localhost:1234}
+      GF_AUTH_ANONYMOUS_ENABLED: ${GF_AUTH_ANONYMOUS_ENABLED:-false}
+      GF_USERS_ALLOW_SIGN_UP: ${GF_USERS_ALLOW_SIGN_UP:-false}
+      GF_USERS_DEFAULT_THEME: ${GF_USERS_DEFAULT_THEME:-dark}
+
+      # --- Optional external OTLP fan-out from the bundled Collector --------
+      # Leave empty unless you also want a copy sent to another backend.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: ${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+
+      # --- Optional verbose logs for bundled components ---------------------
+      ENABLE_LOGS_OTELCOL: ${ENABLE_LOGS_OTELCOL:-false}
+      ENABLE_LOGS_GRAFANA: ${ENABLE_LOGS_GRAFANA:-false}
+      ENABLE_LOGS_LOKI: ${ENABLE_LOGS_LOKI:-false}
+      ENABLE_LOGS_TEMPO: ${ENABLE_LOGS_TEMPO:-false}
+      ENABLE_LOGS_PROMETHEUS: ${ENABLE_LOGS_PROMETHEUS:-false}
+      OTELCOL_EXTRA_ARGS: ${OTELCOL_EXTRA_ARGS:-}
+      TEMPO_EXTRA_ARGS: ${TEMPO_EXTRA_ARGS:-}
+    ports:
+      - "${OPHIR_PORT:-8080}:8080"     # Ophir ingestion + admin API
+      # Grafana listens on 3000 INSIDE the container. This publishes it on
+      # http://localhost:1234 by default.
+      - "${GRAFANA_PORT:-1234}:3000"   # Grafana UI (login required)
+      # OTLP endpoints (optional). Apps normally send telemetry THROUGH Ophir
+      # on 8080; only expose these if some app must talk to the collector direct.
+      # - "4317:4317"                  # OTLP gRPC
+      # - "4318:4318"                  # OTLP HTTP
+    volumes:
+      # Persists all bundled telemetry + Grafana state (everything lives in /data:
+      # /data/grafana, /data/loki, /data/tempo, /data/prometheus). Omit for a
+      # fully ephemeral demo.
+      - ophir-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 5
+
+  # ===========================================================================
+  # OPTIONAL: a local PostgreSQL for quick trials. Ophir expects an EXTERNAL
+  # database; uncomment this if you don't already have one, and set:
+  #   DATABASE_URL=postgres://ophir:ophir@postgres:5432/ophir
+  # ===========================================================================
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: ${COMPOSE_PROJECT_NAME:-ophir}-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: ${POSTGRES_USER:-ophir}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ophir}
+  #     POSTGRES_DB: ${POSTGRES_DB:-ophir}
+  #   volumes:
+  #     - ophir-pgdata:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ophir} -d ${POSTGRES_DB:-ophir}"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 10
+
+volumes:
+  ophir-data:
+  # ophir-pgdata:

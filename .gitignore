@@ -8,10 +8,14 @@ dist/
 # Test / coverage
 coverage/
 
-# Environment
+# Environment / secrets (never commit real values)
 .env
 .env.local
 .env.*.local
+infra/.env
+# Templates are safe to commit
+!.env.example
+!infra/.env.example
 
 # Logs
 *.log

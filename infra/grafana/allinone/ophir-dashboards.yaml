@@ -1,0 +1,13 @@
+# Provisions the Ophir overview dashboard into the bundled Grafana
+# (grafana/otel-lgtm). The Prometheus/Loki/Tempo datasource UIDs referenced by
+# the dashboard already exist in the base image, so it works out of the box.
+apiVersion: 1
+
+providers:
+  - name: "Ophir"
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    options:
+      path: /otel-lgtm/grafana-dashboard-ophir-overview.json
+      foldersFromFilesStructure: false

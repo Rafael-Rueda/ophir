@@ -13,7 +13,7 @@ import { seedDefaultDashboardLinks } from "./dashboard-link.service.js";
 
 /** Per-kind HTTP health endpoints used by probes. */
 const HEALTH_PATHS: Record<IntegrationKind, string> = {
-  collector: "/", // health_check extension (default port 13133)
+  collector: "/ready", // health_check extension (port 13133, path /ready)
   loki: "/ready",
   tempo: "/ready",
   prometheus: "/-/healthy",
